@@ -1,3 +1,4 @@
 Publicación: GitHub Pages
-Backend: Firebase Auth + Cloud Firestore
-NO usar Firebase Hosting.
+Backend: Firebase Auth + Firestore + Cloud Functions
+Login visible: usuario + contraseña
+NO Firebase Hosting.

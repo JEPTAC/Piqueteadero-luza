@@ -12,3 +12,7 @@ export const FIREBASE_CONFIG = {
 // En true funciona como demo local sin Firebase.
 // Cuando pegues la configuración real, cambia a false.
 export const DEMO_MODE = true;
+
+
+// Región de Cloud Functions para crear usuarios internos desde el panel de super admin.
+export const FUNCTIONS_REGION = "us-central1";

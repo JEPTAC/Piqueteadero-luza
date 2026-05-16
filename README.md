@@ -1,22 +1,41 @@
-# Luza POS — GitHub Pages + Firebase
+# Luza POS — GitHub Pages + Firebase Auth/Firestore
 
-Esta versión **NO usa Firebase Hosting**.
+Esta versión publica la app en **GitHub Pages** y usa Firebase como backend.
 
-La app se publica en **GitHub Pages** y usa Firebase únicamente como backend:
+No usa Firebase Hosting.
 
-- Firebase Authentication para usuarios.
-- Cloud Firestore para base de datos.
-- Firestore Realtime para pedidos, caja, producción y notificaciones.
-- Firestore Rules para permisos por rol.
+Firebase se usa para:
+
+- Firebase Authentication
+- Cloud Firestore
+- Cloud Functions para crear usuarios internos desde el panel de `super_admin`
+- Firestore Rules por rol
+
+## Login con usuario y contraseña
+
+El empleado ve:
+
+```txt
+Usuario
+Contraseña
+```
+
+Internamente la app convierte:
+
+```txt
+cajero1 -> cajero1@luza.local
+```
+
+Firebase Auth sigue usando email/password, pero el correo queda oculto para el usuario operativo.
 
 ## Roles
 
-- `super_admin`
-- `gerente`
-- `mesero`
-- `cajero`
-- `cocina`
-- `domicilio`
+- `super_admin`: crea usuarios y administra todo.
+- `gerente`: administra operación, productos, reportes, costos y pagos.
+- `mesero`: crea pedidos, mesas y mueve pedido de mesa.
+- `cajero`: cobra, crédito, caja y facturas.
+- `cocina`: producción.
+- `domicilio`: entregas.
 
 ## Configurar Firebase
 
@@ -33,48 +52,61 @@ export const FIREBASE_CONFIG = {
 };
 
 export const DEMO_MODE = false;
+export const FUNCTIONS_REGION = "us-central1";
 ```
 
-## Crear primer usuario
+## Primer super admin
 
-1. Crea el usuario en Firebase Authentication.
-2. Copia el UID.
-3. Crea en Firestore:
+El primer super admin se crea manualmente una sola vez:
 
-`profiles/UID_DEL_USUARIO`
+1. En Firebase Authentication crea usuario:
+   `admin@luza.local`
+2. En Firestore crea:
+   `profiles/UID_DEL_USUARIO`
+3. Contenido:
 
 ```json
 {
-  "name": "Gerente principal",
-  "email": "correo@restaurante.com",
-  "role": "gerente",
+  "name": "Super Administrador",
+  "username": "admin",
+  "email": "admin@luza.local",
+  "role": "super_admin",
   "isActive": true
 }
 ```
 
-## Subir a GitHub
+Luego ese super admin ya podrá crear usuarios desde la app en el módulo **Usuarios**.
+
+## Desplegar Cloud Function para crear usuarios
+
+```bash
+cd functions
+npm install
+cd ..
+firebase deploy --only functions
+```
+
+Esto no publica la app en Firebase Hosting. Solo despliega la función segura para crear usuarios en Firebase Auth.
+
+## Reglas de Firestore
+
+Pega el contenido de:
+
+```txt
+database/firestore.rules
+```
+
+en Firebase Console → Firestore Database → Rules.
+
+## Publicar app en GitHub Pages
 
 ```bash
 git init
 git add .
-git commit -m "Luza POS GitHub Pages Firebase"
+git commit -m "Luza POS GitHub Pages Firebase con usuarios internos"
 git branch -M main
 git remote add origin https://github.com/TU_USUARIO/luza-pos.git
 git push -u origin main
 ```
 
-## Activar GitHub Pages
-
-En GitHub:
-
-Settings > Pages > Build and deployment
-
-Elige una de estas opciones:
-
-1. **Deploy from a branch**: rama `main`, carpeta `/root`.
-2. **GitHub Actions**: usa `.github/workflows/pages.yml`.
-
-## Importante
-
-No ejecutes `firebase deploy` para publicar la app, porque la publicación será por GitHub Pages.
-Firebase queda solo para Auth + Firestore.
+Después activa GitHub Pages desde Settings > Pages.

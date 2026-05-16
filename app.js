@@ -1,7 +1,8 @@
-import { FIREBASE_CONFIG, DEMO_MODE } from './firebase-config.js';
+import { FIREBASE_CONFIG, DEMO_MODE, FUNCTIONS_REGION } from './firebase-config.js';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js';
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
+import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-functions.js';
 
 const $ = (id) => document.getElementById(id);
 const money = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
@@ -9,6 +10,8 @@ const configured = Boolean(FIREBASE_CONFIG?.apiKey && FIREBASE_CONFIG?.projectId
 const firebaseApp = configured ? initializeApp(FIREBASE_CONFIG) : null;
 const auth = configured ? getAuth(firebaseApp) : null;
 const db = configured ? getFirestore(firebaseApp) : null;
+const functions = configured ? getFunctions(firebaseApp, FUNCTIONS_REGION || 'us-central1') : null;
+const createInternalUserFn = configured ? httpsCallable(functions, 'createInternalUser') : null;
 const SUPER_ROLES = ['super_admin', 'gerente'];
 const ROLES = {
   super_admin: 'Super admin', gerente: 'Gerente', mesero: 'Mesero', cajero: 'Cajero', cocina: 'Cocina / producción', domicilio: 'Domiciliario'
@@ -16,10 +19,10 @@ const ROLES = {
 const PAGES = [
   ['dashboard','📊','Panel'], ['waiter','🍽️','Mesero'], ['cashier','💵','Caja'],
   ['production','👨‍🍳','Cocina'], ['delivery','🛵','Domicilios'], ['credit','🧾','Créditos'],
-  ['manager','📈','Gerencia'], ['settings','⚙️','Admin']
+  ['manager','📈','Gerencia'], ['settings','⚙️','Admin'], ['users','👥','Usuarios']
 ];
 const ACCESS = {
-  super_admin: PAGES.map(p=>p[0]), gerente: PAGES.map(p=>p[0]),
+  super_admin: PAGES.map(p=>p[0]), gerente: PAGES.map(p=>p[0]).filter(p=>p!=='users'),
   mesero: ['waiter','dashboard'], cajero: ['cashier','credit','dashboard'],
   cocina: ['production'], domicilio: ['delivery']
 };
@@ -27,7 +30,7 @@ const TABLES = {
   rooms:'rooms', tables:'restaurant_tables', products:'products', orders:'orders', orderItems:'order_items',
   deliveries:'deliveries', deliveryItems:'delivery_items', customers:'customers', creditMovements:'credit_movements',
   providers:'providers', expenses:'expenses', employees:'employees', employeePayments:'employee_payments',
-  sales:'sales', cashSessions:'cash_sessions', notifications:'app_notifications'
+  sales:'sales', cashSessions:'cash_sessions', notifications:'app_notifications', profiles:'profiles'
 };
 
 let audioUnlocked = false;
@@ -40,7 +43,7 @@ const state = {
   page: 'dashboard', tab: 'products', selectedTable: 'm1', connected: false,
   settings: { brand:'Piqueteadero Luza', logo:'assets/logo.jpg', tax:'Recibo interno POS', receiptNote:'Gracias por su compra' },
   rooms: [], tables: [], products: [], orders: [], deliveries: [], customers: [], creditMovements: [],
-  providers: [], expenses: [], employees: [], employeePayments: [], sales: [], cashSessions: [], notifications: []
+  providers: [], expenses: [], employees: [], employeePayments: [], sales: [], cashSessions: [], notifications: [], profiles: []
 };
 
 function seed() {
@@ -117,7 +120,8 @@ function pageMeta(page) {
     delivery:['Domicilios','Pedidos, preparación, ruta, entrega y tiempos.'],
     credit:['Créditos','Clientes, cargos, abonos y saldos pendientes.'],
     manager:['Gerencia','Rentabilidad, pagos, empleados, proveedores y análisis.'],
-    settings:['Administración','Productos, usuarios, empleados, proveedores y parámetros.']
+    settings:['Administración','Productos, empleados, proveedores y parámetros.'],
+    users:['Usuarios internos','Crear usuarios con usuario, contraseña y rol.']
   }[page] || ['Panel',''];
 }
 
@@ -137,19 +141,24 @@ async function boot() {
   }
 }
 
+function usernameToEmail(username) {
+  return `${String(username || '').trim().toLowerCase().replace(/\s+/g,'')}@luza.local`;
+}
+
 function showLogin() {
   $('login').classList.remove('hidden'); $('app').classList.add('hidden');
   $('login').innerHTML = `
     <div class="login-card">
       <img src="assets/logo.jpg" alt="Logo">
       <h1>Piqueteadero Luza POS</h1>
-      <p>${configured ? 'Ingresa con usuario Firebase.' : 'Modo demo local. Configura Firebase para operación real.'}</p>
+      <p>${configured ? 'Ingresa con usuario y contraseña.' : 'Modo demo local. Configura Firebase para operación real.'}</p>
       ${configured ? `
         <form id="loginForm" class="form">
-          <div class="full"><label>Correo</label><input class="input" id="email" type="email" required></div>
-          <div class="full"><label>Contraseña</label><input class="input" id="password" type="password" required></div>
+          <div class="full"><label>Usuario</label><input class="input" id="username" type="text" autocomplete="username" placeholder="Ej: cajero1" required></div>
+          <div class="full"><label>Contraseña</label><input class="input" id="password" type="password" autocomplete="current-password" required></div>
           <div class="full"><button class="btn yellow block">Ingresar</button></div>
-        </form>` : `
+        </form>
+        <p class="small">La app convierte internamente el usuario a usuario@luza.local para Firebase Auth.</p>` : `
         <div class="demo-grid">
           ${Object.entries(ROLES).map(([r,l]) => `<button class="btn ${SUPER_ROLES.includes(r)?'yellow':'white'}" onclick="window.__demoLogin('${r}')">${l}</button>`).join('')}
         </div>`}
@@ -165,12 +174,12 @@ window.__demoLogin = (role) => {
 
 async function loginFirebase(e) {
   e.preventDefault();
-  const email = $('email').value.trim(); const password = $('password').value;
+  const email = usernameToEmail($('username').value); const password = $('password').value;
   try {
     const cred = await signInWithEmailAndPassword(auth, email, password);
     await hydrateFirebaseUser(cred.user);
   } catch (error) {
-    notify(`No se pudo ingresar: ${error.message}`, 'urgent');
+    notify('No se pudo ingresar. Revisa usuario o contraseña.', 'urgent');
   }
 }
 async function hydrateFirebaseUser(user) {
@@ -196,7 +205,7 @@ async function loadFromFirebase() {
   const calls = [
     ['rooms','rooms'], ['tables','restaurant_tables'], ['products','products'], ['orders','orders'], ['orderItems','order_items'],
     ['deliveries','deliveries'], ['deliveryItems','delivery_items'], ['customers','customers'], ['creditMovements','credit_movements'],
-    ['providers','providers'], ['expenses','expenses'], ['employees','employees'], ['employeePayments','employee_payments'], ['sales','sales'], ['cashSessions','cash_sessions'], ['notifications','app_notifications']
+    ['providers','providers'], ['expenses','expenses'], ['employees','employees'], ['employeePayments','employee_payments'], ['sales','sales'], ['cashSessions','cash_sessions'], ['notifications','app_notifications'], ['profiles','profiles']
   ];
   for (const [key, colName] of calls) {
     const snap = await getDocs(collection(db, colName));
@@ -210,7 +219,7 @@ async function loadFromFirebase() {
 function groupBy(arr, key) { return arr.reduce((a,x)=>((a[x[key]] ||= []).push(x),a),{}); }
 function setupRealtime() {
   if (!configured) return;
-  ['orders','order_items','deliveries','delivery_items','restaurant_tables','products','sales','expenses','employee_payments','cash_sessions'].forEach(colName => {
+  ['orders','order_items','deliveries','delivery_items','restaurant_tables','products','sales','expenses','employee_payments','cash_sessions','profiles'].forEach(colName => {
     onSnapshot(collection(db, colName), scheduleReload);
   });
   onSnapshot(collection(db, 'app_notifications'), (snap) => {
@@ -303,7 +312,7 @@ function render() {
   $('userName').textContent = state.user.name; $('userRole').textContent = ROLES[state.user.role] || state.user.role;
   $('mobileRole').textContent = ROLES[state.user.role] || state.user.role;
   $('connectionPill').innerHTML = `<span class="dot ${configured && state.connected ? 'online' : ''}"></span>${configured ? 'Firebase activo' : 'Demo local'}`;
-  const pageRender = {dashboard, waiter, cashier, production, delivery, credit, manager, settings}[state.page] || dashboard;
+  const pageRender = {dashboard, waiter, cashier, production, delivery, credit, manager, settings, users}[state.page] || dashboard;
   $('view').innerHTML = pageRender();
 }
 function renderShell() {
@@ -458,6 +467,38 @@ window.__saveEmployeePayment = async () => { const row={id:uid('ep'),employee_id
 window.__expenseModal = () => openModal(`<div class="title"><div><h2>Nuevo gasto o proveedor</h2></div><button class="btn white" onclick="window.__closeModal()">Cerrar</button></div><div class="form"><div><label>Tipo</label><select id="exType" class="select"><option value="proveedor">Proveedor</option><option value="servicio">Servicio</option><option value="compra">Compra</option><option value="gasto">Gasto</option></select></div><div><label>Valor</label><input id="exAmount" class="input" type="number" value="100000"></div><div><label>Método</label><select id="exMethod" class="select"><option>efectivo</option><option>nequi</option><option>transferencia</option><option>tarjeta</option></select></div><div class="full"><label>Detalle</label><input id="exDetail" class="input" value="Pago proveedor"></div><div class="full"><button class="btn yellow block" onclick="window.__saveExpense()">Guardar gasto</button></div></div>`);
 window.__saveExpense = async () => { const row={id:uid('ex'),created_at:Date.now(),type:$('exType').value,amount:+$('exAmount').value||0,method:$('exMethod').value,detail:$('exDetail').value}; state.expenses.push(row); await dbUpsert(TABLES.expenses,row); closeModal(); render(); };
 
+
+function users() {
+  if (state.user.role !== 'super_admin') {
+    return `<div class="empty">Solo el super admin puede crear usuarios internos.</div>`;
+  }
+  const profileRows = (state.profiles || []).filter(p => p.role);
+  return `<div class="grid two">
+    <div class="card">
+      <div class="title"><div><h2>Crear usuario interno</h2><p>El empleado entra con usuario y contraseña. No necesita correo.</p></div></div>
+      <div class="form">
+        <div><label>Nombre</label><input id="newUserName" class="input" value="Nuevo usuario"></div>
+        <div><label>Usuario</label><input id="newUsername" class="input" value="mesero1" autocomplete="off"></div>
+        <div><label>Contraseña temporal</label><input id="newPassword" class="input" type="password" value="123456"></div>
+        <div><label>Rol</label><select id="newRole" class="select">
+          <option value="mesero">Mesero</option>
+          <option value="cajero">Cajero</option>
+          <option value="cocina">Cocina / producción</option>
+          <option value="domicilio">Domiciliario</option>
+          <option value="gerente">Gerente</option>
+          <option value="super_admin">Super admin</option>
+        </select></div>
+        <div class="full"><button class="btn yellow block" onclick="window.__createInternalUser()">Crear usuario</button></div>
+      </div>
+      <p class="small">Correo técnico automático: usuario@luza.local. La creación real en Firebase Auth se hace con Cloud Functions.</p>
+    </div>
+    <div class="card">
+      <div class="title"><div><h2>Usuarios registrados</h2><p>Perfiles activos en Firestore.</p></div></div>
+      <div class="list">${profileRows.map(u => `<div class="line"><div><strong>${esc(u.name || u.username || 'Usuario')}</strong><span class="small">${esc(u.username || '')} · ${esc(u.email || '')} · ${esc(ROLES[u.role] || u.role)}</span></div><span class="status ${u.isActive === false ? 's-bad':'s-ok'}">${u.isActive === false ? 'Inactivo':'Activo'}</span></div>`).join('') || '<div class="empty">Cuando conectes Firebase aparecerán los usuarios creados.</div>'}</div>
+    </div>
+  </div>`;
+}
+
 function settings() {
   const tabs = [['products','Productos'],['tables','Mesas'],['people','Usuarios/empleados'],['clients','Clientes'],['providers','Proveedores']];
   return `<div class="tabs">${tabs.map(t=>`<button class="tab ${state.tab===t[0]?'active':''}" onclick="window.__setTab('${t[0]}')">${t[1]}</button>`).join('')}</div>${state.tab==='products'?settingsProducts():state.tab==='tables'?settingsTables():state.tab==='people'?settingsPeople():state.tab==='clients'?settingsClients():settingsProviders()}`;
@@ -465,7 +506,7 @@ function settings() {
 window.__setTab = (t) => { state.tab=t; render(); };
 function settingsProducts(){ return `<div class="card"><div class="title"><div><h2>Productos, precios, costos y stock</h2><p>Bebidas quedan junto con cocina/producción.</p></div><button class="btn yellow" onclick="window.__addProduct()">Nuevo producto</button></div><div class="editor">${state.products.map(p=>`<div class="edit-row prod-row"><input class="input" value="${esc(p.name)}" onchange="window.__updProduct('${p.id}','name',this.value)"><input class="input" value="${esc(p.category)}" onchange="window.__updProduct('${p.id}','category',this.value)"><select class="select" onchange="window.__updProduct('${p.id}','area',this.value)"><option value="cocina" ${p.area==='cocina'?'selected':''}>Cocina/producción</option></select><input class="input" type="number" value="${p.price}" onchange="window.__updProduct('${p.id}','price',+this.value)"><input class="input" type="number" value="${p.cost}" onchange="window.__updProduct('${p.id}','cost',+this.value)"><input class="input" type="number" value="${p.stock}" onchange="window.__updProduct('${p.id}','stock',+this.value)"><div class="line-actions"><button class="btn small ${p.active?'white':'yellow'}" onclick="window.__toggleProduct('${p.id}')">${p.active?'Ocultar':'Activar'}</button><button class="btn small red" onclick="window.__soldOut('${p.id}')">Agotado</button></div></div>`).join('')}</div></div>`; }
 function settingsTables(){ return `<div class="grid two"><div class="card"><div class="title"><div><h2>Crear mesas</h2><p>También disponible para el mesero.</p></div></div><div class="form"><div><label>Salón</label><select id="btRoom" class="select">${state.rooms.map(r=>`<option value="${r.id}">${esc(r.name)}</option>`).join('')}</select></div><div><label>Cantidad</label><input id="btQty" class="input" type="number" value="4"></div><div><label>Prefijo</label><input id="btPrefix" class="input" value="Mesa"></div><div><label>Número inicial</label><input id="btStart" class="input" type="number" value="${state.tables.length+1}"></div><div><label>Capacidad</label><input id="btCap" class="input" type="number" value="4"></div><div><label>Nuevo salón</label><input id="newRoomName" class="input" value="VIP"></div><div class="full toolbar"><button class="btn yellow" onclick="window.__batchTables()">Crear mesas</button><button class="btn white" onclick="window.__addRoom()">Crear salón</button></div></div></div><div class="card"><div class="title"><div><h2>Mesas actuales</h2></div></div><div class="editor">${state.tables.map(t=>`<div class="edit-row table-row"><input class="input" value="${esc(t.name)}" onchange="window.__updTable('${t.id}','name',this.value)"><select class="select" onchange="window.__updTable('${t.id}','room_id',this.value)">${state.rooms.map(r=>`<option value="${r.id}" ${r.id===t.room_id?'selected':''}>${esc(r.name)}</option>`).join('')}</select><input class="input" type="number" value="${t.capacity}" onchange="window.__updTable('${t.id}','capacity',+this.value)"><button class="btn small ${t.active?'white':'yellow'}" onclick="window.__toggleTable('${t.id}')">${t.active?'Desactivar':'Activar'}</button><button class="btn small red" onclick="window.__deleteTable('${t.id}')">Eliminar</button></div>`).join('')}</div></div></div>`; }
-function settingsPeople(){ return `<div class="grid two"><div class="card"><div class="title"><div><h2>Empleados</h2></div><button class="btn yellow" onclick="window.__addEmployee()">Nuevo empleado</button></div><div class="editor">${state.employees.map(e=>`<div class="edit-row people-row"><input class="input" value="${esc(e.name)}" onchange="window.__updEmployee('${e.id}','name',this.value)"><select class="select" onchange="window.__updEmployee('${e.id}','role',this.value)">${Object.entries(ROLES).filter(([r])=>!SUPER_ROLES.includes(r)).map(([r,l])=>`<option value="${r}" ${e.role===r?'selected':''}>${l}</option>`).join('')}</select><input class="input" type="number" value="${e.base_pay}" onchange="window.__updEmployee('${e.id}','base_pay',+this.value)"><span class="status ${e.active?'s-ok':'s-bad'}">${e.active?'Activo':'Inactivo'}</span><button class="btn small white" onclick="window.__toggleEmployee('${e.id}')">${e.active?'Desactivar':'Activar'}</button></div>`).join('')}</div></div><div class="card black"><h2>Roles Firebase</h2><p>Los usuarios reales se crean en Firebase Auth y se les asigna rol en la tabla profiles.</p></div></div>`; }
+function settingsPeople(){ return `<div class="grid two"><div class="card"><div class="title"><div><h2>Empleados</h2></div><button class="btn yellow" onclick="window.__addEmployee()">Nuevo empleado</button></div><div class="editor">${state.employees.map(e=>`<div class="edit-row people-row"><input class="input" value="${esc(e.name)}" onchange="window.__updEmployee('${e.id}','name',this.value)"><select class="select" onchange="window.__updEmployee('${e.id}','role',this.value)">${Object.entries(ROLES).filter(([r])=>!SUPER_ROLES.includes(r)).map(([r,l])=>`<option value="${r}" ${e.role===r?'selected':''}>${l}</option>`).join('')}</select><input class="input" type="number" value="${e.base_pay}" onchange="window.__updEmployee('${e.id}','base_pay',+this.value)"><span class="status ${e.active?'s-ok':'s-bad'}">${e.active?'Activo':'Inactivo'}</span><button class="btn small white" onclick="window.__toggleEmployee('${e.id}')">${e.active?'Desactivar':'Activar'}</button></div>`).join('')}</div></div><div class="card black"><h2>Usuarios del sistema</h2><p>Los usuarios reales se crean desde el módulo Usuarios, visible para super admin. Aquí se manejan empleados y pagos.</p></div></div>`; }
 function settingsClients(){ return `<div class="card"><div class="title"><div><h2>Clientes crédito</h2></div><button class="btn yellow" onclick="window.__newCustomerModal()">Nuevo cliente</button></div><div class="editor">${state.customers.filter(c=>c.id!=='c0').map(c=>`<div class="edit-row people-row"><input class="input" value="${esc(c.name)}" onchange="window.__updCustomer('${c.id}','name',this.value)"><input class="input" value="${esc(c.phone)}" onchange="window.__updCustomer('${c.id}','phone',this.value)"><input class="input" type="number" value="${c.credit_limit}" onchange="window.__updCustomer('${c.id}','credit_limit',+this.value)"><span class="status ${c.balance>0?'s-warn':'s-ok'}">${money.format(c.balance)}</span><button class="btn small green" onclick="window.__payCreditModal('${c.id}')">Abono</button></div>`).join('')}</div></div>`; }
 function settingsProviders(){ return `<div class="card"><div class="title"><div><h2>Proveedores y gastos</h2></div><button class="btn yellow" onclick="window.__expenseModal()">Nuevo gasto</button></div><div class="list">${state.expenses.map(e=>`<div class="line"><div><strong>${esc(e.detail)}</strong><span class="small">${e.type} · ${money.format(e.amount)} · ${e.method}</span></div></div>`).join('')}</div></div>`; }
 window.__quickTableModal = () => { state.tab='tables'; openModal(`<div class="title"><div><h2>Crear mesas rápido</h2><p>Disponible en la interfaz del mesero.</p></div><button class="btn white" onclick="window.__closeModal()">Cerrar</button></div><div class="form"><div><label>Salón</label><select id="btRoom" class="select">${state.rooms.map(r=>`<option value="${r.id}">${esc(r.name)}</option>`).join('')}</select></div><div><label>Cantidad</label><input id="btQty" class="input" type="number" value="2"></div><div><label>Prefijo</label><input id="btPrefix" class="input" value="Mesa"></div><div><label>Número inicial</label><input id="btStart" class="input" type="number" value="${state.tables.length+1}"></div><div><label>Capacidad</label><input id="btCap" class="input" type="number" value="4"></div><div class="full"><button class="btn yellow block" onclick="window.__batchTables();window.__closeModal()">Crear mesas</button></div></div>`); };
