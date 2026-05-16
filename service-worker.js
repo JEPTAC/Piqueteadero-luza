@@ -1,4 +1,4 @@
-const CACHE = 'luza-pos-github-firebase-v12-users';
+const CACHE = 'luza-pos-github-firebase-v13-login-fix';
 const ASSETS = [
   './', './index.html', './styles.css', './app.js', './supabase-config.js', './manifest.webmanifest',
   './assets/logo.jpg', './assets/icon-192.png', './assets/icon-512.png', './assets/sounds/urgent.wav', './assets/sounds/ready.wav', './assets/sounds/soft.wav'

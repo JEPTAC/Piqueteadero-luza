@@ -1,0 +1,22 @@
+V13 - Corrección login PIN / contraseña
+
+Cambios:
+- El campo Código de usuario acepta admin o admin@luza.local.
+- Evita convertir admin@luza.local en admin@luza.local@luza.local.
+- El PIN se limpia de espacios al inicio/final.
+- El mensaje de error ahora indica qué correo técnico está intentando usar.
+- Si Auth funciona pero falta Firestore, muestra users/UID exacto.
+
+Para el primer super admin:
+Authentication:
+admin@luza.local
+Contraseña/PIN:
+123456
+
+Firestore:
+users/UID_DEL_ADMIN
+name: Super Administrador
+username: admin
+email: admin@luza.local
+role: super_admin
+isActive: true
