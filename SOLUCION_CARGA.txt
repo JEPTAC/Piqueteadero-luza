@@ -1,0 +1,14 @@
+V11 - Corrección de pantalla 'Cargando sistema operativo...'
+
+Esta versión agrega:
+- Captura de errores de carga.
+- Limpieza de localStorage si hay datos corruptos.
+- Mensaje visible si Firestore bloquea alguna colección.
+- Evita que la app se quede congelada en el boot.
+- Nuevo cache del service worker para no abrir versión anterior.
+
+Si GitHub Pages sigue mostrando la versión vieja:
+1. Abrir en incógnito.
+2. Ctrl + F5.
+3. En Chrome: DevTools > Application > Service Workers > Unregister.
+4. Borrar datos del sitio y volver a abrir.

@@ -92,9 +92,15 @@ function seed() {
 }
 
 function loadLocal() {
-  const saved = localStorage.getItem('luza-pos-firebase-v7');
-  if (saved) Object.assign(state, JSON.parse(saved));
-  else Object.assign(state, seed());
+  try {
+    const saved = localStorage.getItem('luza-pos-firebase-v7');
+    if (saved) Object.assign(state, JSON.parse(saved));
+    else Object.assign(state, seed());
+  } catch (error) {
+    console.error('Error leyendo almacenamiento local:', error);
+    localStorage.removeItem('luza-pos-firebase-v7');
+    Object.assign(state, seed());
+  }
 }
 function saveLocal() {
   const copy = {...state}; delete copy.session; delete copy.connected;
@@ -130,19 +136,63 @@ function pageMeta(page) {
   }[page] || ['Panel',''];
 }
 
+
+function hideBoot() {
+  const bootEl = $('boot');
+  if (bootEl) bootEl.classList.add('hidden');
+}
+
+function showFatalLoadError(error) {
+  console.error('Error de carga Luza POS:', error);
+  hideBoot();
+  const message = error?.message || String(error || 'Error desconocido');
+  $('login').classList.remove('hidden');
+  $('app').classList.add('hidden');
+  $('login').innerHTML = `
+    <div class="login-card">
+      <img src="assets/logo.jpg" alt="Logo">
+      <h1>Piqueteadero Luza POS</h1>
+      <p>No se pudo terminar de cargar la app.</p>
+      <div class="danger" style="margin-top:14px;text-align:left">
+        <strong>Error detectado</strong>
+        <p class="small">${esc(message)}</p>
+      </div>
+      <button class="btn yellow block" style="margin-top:14px" onclick="location.reload()">Recargar</button>
+      <button class="btn white block" style="margin-top:10px" onclick="localStorage.clear(); location.reload()">Limpiar caché local y recargar</button>
+      <p class="small">Si estás usando GitHub Pages, haz Ctrl + F5 o abre en incógnito para evitar caché de la PWA.</p>
+    </div>`;
+}
+
+window.addEventListener('error', (event) => {
+  showFatalLoadError(event.error || event.message);
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+  showFatalLoadError(event.reason || 'Promesa rechazada sin capturar');
+});
+
 async function boot() {
-  loadLocal();
-  setupPwa();
-  bindChrome();
-  if (configured) {
-    onAuthStateChanged(auth, async (user) => {
-      if (user) await hydrateFirebaseUser(user);
-      else showLogin();
-      setTimeout(() => $('boot').classList.add('hidden'), 450);
-    });
-  } else {
-    showLogin();
-    setTimeout(() => $('boot').classList.add('hidden'), 450);
+  try {
+    loadLocal();
+    setupPwa();
+    bindChrome();
+
+    if (configured) {
+      onAuthStateChanged(auth, async (user) => {
+        try {
+          if (user) await hydrateFirebaseUser(user);
+          else showLogin();
+          setTimeout(hideBoot, 450);
+        } catch (error) {
+          showFatalLoadError(error);
+        }
+      });
+    } else {
+      showLogin();
+      setTimeout(hideBoot, 450);
+    }
+  } catch (error) {
+    showFatalLoadError(error);
   }
 }
 
@@ -197,19 +247,42 @@ async function loginFirebase(e) {
 }
 async function hydrateFirebaseUser(user) {
   state.session = { uid: user.uid };
-  const snap = await getDoc(doc(db, 'profiles', user.uid));
+
+  let snap;
+  try {
+    snap = await getDoc(doc(db, 'profiles', user.uid));
+  } catch (error) {
+    showLogin();
+    throw new Error('No se pudo leer profiles/' + user.uid + '. Revisa reglas de Firestore y que la colección se llame profiles. Detalle: ' + error.message);
+  }
+
   if (!snap.exists()) {
-    showLogin(); notify('El usuario existe en Firebase Auth, pero no tiene perfil/rol en Firestore: profiles/{uid}.', 'urgent'); return;
+    showLogin();
+    notify('El usuario existe en Firebase Auth, pero no tiene perfil/rol en Firestore: profiles/{uid}.', 'urgent');
+    return;
   }
+
   const profile = snap.data();
-  if (profile.isActive === false) {
-    showLogin(); notify('Usuario inactivo. Solicita activación al gerente.', 'urgent'); return;
+  if (profile.isActive !== true) {
+    showLogin();
+    notify('Usuario inactivo o isActive no está como boolean true.', 'urgent');
+    return;
   }
+
+  if (!ACCESS[profile.role]) {
+    showLogin();
+    notify('Rol inválido en Firestore. Usa super_admin, gerente, mesero, cajero, cocina o domicilio.', 'urgent');
+    return;
+  }
+
   state.user = { id: user.uid, name: profile.name || user.email, role: profile.role, email: user.email };
   state.page = (ACCESS[state.user.role] || ['dashboard'])[0];
+
   await loadFromFirebase();
   setupRealtime();
-  $('login').classList.add('hidden'); $('app').classList.remove('hidden'); render();
+  $('login').classList.add('hidden');
+  $('app').classList.remove('hidden');
+  render();
 }
 
 async function loadFromFirebase() {
@@ -220,9 +293,19 @@ async function loadFromFirebase() {
     ['deliveries','deliveries'], ['deliveryItems','delivery_items'], ['customers','customers'], ['creditMovements','credit_movements'],
     ['providers','providers'], ['expenses','expenses'], ['employees','employees'], ['employeePayments','employee_payments'], ['sales','sales'], ['cashSessions','cash_sessions'], ['notifications','app_notifications'], ['profiles','profiles']
   ];
+  const errors = [];
   for (const [key, colName] of calls) {
-    const snap = await getDocs(collection(db, colName));
-    state[key] = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b)=>(a.created_at||0)-(b.created_at||0));
+    try {
+      const snap = await getDocs(collection(db, colName));
+      state[key] = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b)=>(a.created_at||0)-(b.created_at||0));
+    } catch (error) {
+      console.warn('No se pudo leer colección', colName, error);
+      state[key] = state[key] || [];
+      errors.push(`${colName}: ${error.code || error.message}`);
+    }
+  }
+  if (errors.length) {
+    notify('Algunas colecciones no pudieron leerse. Revisa reglas Firestore: ' + errors.slice(0,3).join(' | '), 'urgent');
   }
   const itemsByOrder = Object.groupBy ? Object.groupBy(state.orderItems, x => x.order_id) : groupBy(state.orderItems, 'order_id');
   state.orders = state.orders.map(o => ({...o, items: itemsByOrder[o.id] || []}));
@@ -230,11 +313,17 @@ async function loadFromFirebase() {
   state.deliveries = state.deliveries.map(d => ({...d, items: itemsByDelivery[d.id] || []}));
 }
 function groupBy(arr, key) { return arr.reduce((a,x)=>((a[x[key]] ||= []).push(x),a),{}); }
+let realtimeReady = false;
 function setupRealtime() {
-  if (!configured) return;
+  if (!configured || realtimeReady) return;
+  realtimeReady = true;
+
   ['orders','order_items','deliveries','delivery_items','restaurant_tables','products','sales','expenses','employee_payments','cash_sessions','profiles'].forEach(colName => {
-    onSnapshot(collection(db, colName), scheduleReload);
+    onSnapshot(collection(db, colName), scheduleReload, (error) => {
+      console.warn('Realtime sin permiso o no disponible en', colName, error);
+    });
   });
+
   onSnapshot(collection(db, 'app_notifications'), (snap) => {
     snap.docChanges().forEach(change => {
       if (change.type === 'added') {
@@ -246,11 +335,21 @@ function setupRealtime() {
       }
     });
     scheduleReload();
+  }, (error) => {
+    console.warn('Realtime app_notifications sin permiso o no disponible', error);
   });
 }
 function scheduleReload() {
   clearTimeout(reloadTimer);
-  reloadTimer = setTimeout(async () => { await loadFromFirebase(); render(); }, 500);
+  reloadTimer = setTimeout(async () => {
+    try {
+      await loadFromFirebase();
+      render();
+    } catch (error) {
+      console.error('Error sincronizando:', error);
+      notify('Error sincronizando: ' + error.message, 'urgent');
+    }
+  }, 500);
 }
 function cleanFirestore(obj) {
   return Object.fromEntries(Object.entries(obj).filter(([_,v]) => v !== undefined && typeof v !== 'function'));
