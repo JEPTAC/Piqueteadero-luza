@@ -1,0 +1,34 @@
+{
+  "profiles": {
+    "UID_DEL_GERENTE": {
+      "name": "Gerente principal",
+      "role": "gerente",
+      "isActive": true
+    },
+    "UID_DEL_SUPER_ADMIN": {
+      "name": "Super admin",
+      "role": "super_admin",
+      "isActive": true
+    },
+    "UID_DEL_MESERO": {
+      "name": "Mesero 1",
+      "role": "mesero",
+      "isActive": true
+    },
+    "UID_DEL_CAJERO": {
+      "name": "Cajero 1",
+      "role": "cajero",
+      "isActive": true
+    },
+    "UID_DE_COCINA": {
+      "name": "Cocina",
+      "role": "cocina",
+      "isActive": true
+    },
+    "UID_DEL_DOMICILIARIO": {
+      "name": "Domiciliario",
+      "role": "domicilio",
+      "isActive": true
+    }
+  }
+}

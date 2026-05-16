@@ -1,0 +1,3 @@
+Publicación: GitHub Pages
+Backend: Firebase Auth + Cloud Firestore
+NO usar Firebase Hosting.

@@ -1,0 +1,36 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function profile() { return get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data; }
+    function active() { return signedIn() && profile().isActive == true; }
+    function role() { return profile().role; }
+    function admin() { return active() && (role() in ['super_admin','gerente']); }
+    function cashier() { return active() && (role() in ['super_admin','gerente','cajero']); }
+    function waiter() { return active() && (role() in ['super_admin','gerente','mesero']); }
+    function kitchen() { return active() && (role() in ['super_admin','gerente','cocina']); }
+    function delivery() { return active() && (role() in ['super_admin','gerente','domicilio']); }
+
+    match /profiles/{uid} {
+      allow read: if active() && (request.auth.uid == uid || admin());
+      allow write: if admin();
+    }
+
+    match /rooms/{id} { allow read: if active(); allow write: if admin() || waiter(); }
+    match /restaurant_tables/{id} { allow read: if active(); allow write: if admin() || waiter(); }
+    match /products/{id} { allow read: if active(); allow write: if admin(); }
+    match /orders/{id} { allow read: if active(); allow write: if admin() || waiter() || cashier(); }
+    match /order_items/{id} { allow read: if active(); allow write: if admin() || waiter() || kitchen(); }
+    match /deliveries/{id} { allow read: if active(); allow write: if admin() || delivery() || cashier(); }
+    match /delivery_items/{id} { allow read: if active(); allow write: if admin() || delivery() || kitchen(); }
+    match /customers/{id} { allow read: if cashier(); allow write: if cashier(); }
+    match /credit_movements/{id} { allow read: if cashier(); allow write: if cashier(); }
+    match /providers/{id} { allow read: if admin(); allow write: if admin(); }
+    match /expenses/{id} { allow read: if admin(); allow write: if admin(); }
+    match /employees/{id} { allow read: if admin(); allow write: if admin(); }
+    match /employee_payments/{id} { allow read: if admin(); allow write: if admin(); }
+    match /sales/{id} { allow read: if cashier() || admin(); allow write: if cashier() || admin() || delivery(); }
+    match /cash_sessions/{id} { allow read: if cashier() || admin(); allow write: if cashier() || admin(); }
+    match /app_notifications/{id} { allow read: if active(); allow write: if active(); }
+  }
+}
