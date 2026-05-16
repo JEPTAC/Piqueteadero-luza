@@ -12,7 +12,7 @@ function usernameToEmail(username) {
 }
 
 async function requireSuperAdmin(uid) {
-  const snap = await db.collection('profiles').doc(uid).get();
+  const snap = await db.collection('users').doc(uid).get();
   if (!snap.exists) return false;
   const profile = snap.data();
   return profile?.isActive === true && profile?.role === 'super_admin';
@@ -50,7 +50,7 @@ export const createInternalUser = onCall({ region: 'us-central1' }, async (reque
     disabled: false
   });
 
-  await db.collection('profiles').doc(userRecord.uid).set({
+  await db.collection('users').doc(userRecord.uid).set({
     name,
     username: cleanUsername,
     email,

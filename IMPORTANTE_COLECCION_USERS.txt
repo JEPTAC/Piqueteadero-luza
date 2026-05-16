@@ -1,0 +1,18 @@
+V12 corregida para usar tu colección real: users
+
+La app ahora busca el documento del usuario en:
+users/UID_DEL_USUARIO
+
+No usa profiles.
+
+Tu primer super admin debe estar en:
+users/35cljcvB3wR1GdMaW5oso6gUOhh2
+
+Campos:
+name: Super Administrador
+username: admin
+email: admin@luza.local
+role: super_admin
+isActive: true
+
+isActive debe ser boolean, no string.

@@ -7,48 +7,71 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function profileExists() {
-      return signedIn()
-        && exists(/databases/$(database)/documents/profiles/$(request.auth.uid));
+    function userPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
     }
 
-    function profile() {
-      return get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data;
+    function userExists() {
+      return signedIn() && exists(userPath());
+    }
+
+    function currentUser() {
+      return get(userPath()).data;
     }
 
     function active() {
-      return profileExists() && profile().isActive == true;
+      return userExists() && currentUser().isActive == true;
     }
 
     function role() {
-      return profile().role;
+      return currentUser().role;
     }
 
     function superAdmin() {
       return active() && role() == 'super_admin';
     }
 
+    function gerente() {
+      return active() && role() == 'gerente';
+    }
+
+    function mesero() {
+      return active() && role() == 'mesero';
+    }
+
+    function cajero() {
+      return active() && role() == 'cajero';
+    }
+
+    function cocina() {
+      return active() && role() == 'cocina';
+    }
+
+    function domicilio() {
+      return active() && role() == 'domicilio';
+    }
+
     function admin() {
       return active() && role() in ['super_admin', 'gerente'];
     }
 
-    function cashier() {
+    function cajaOAdmin() {
       return active() && role() in ['super_admin', 'gerente', 'cajero'];
     }
 
-    function waiter() {
+    function meseroOAdmin() {
       return active() && role() in ['super_admin', 'gerente', 'mesero'];
     }
 
-    function kitchen() {
+    function cocinaOAdmin() {
       return active() && role() in ['super_admin', 'gerente', 'cocina'];
     }
 
-    function delivery() {
+    function domicilioOAdmin() {
       return active() && role() in ['super_admin', 'gerente', 'domicilio'];
     }
 
-    function operation() {
+    function operacionGeneral() {
       return active() && role() in [
         'super_admin',
         'gerente',
@@ -59,85 +82,113 @@ service cloud.firestore {
       ];
     }
 
-    match /profiles/{uid} {
-      allow read: if active() && (request.auth.uid == uid || admin());
+    function onlyOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function cannotChangeRoleOrStatus() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['role', 'isActive', 'createdBy', 'createdAt']);
+    }
+
+    // =========================================================
+    // USUARIOS INTERNOS
+    // users/UID_DEL_USUARIO
+    // =========================================================
+    match /users/{uid} {
+      allow read: if active() && (onlyOwner(uid) || admin());
+
+      // El primer usuario lo puedes crear manualmente desde consola.
+      // Luego, la Cloud Function createInternalUser crea los demás.
       allow create: if superAdmin();
-      allow update: if superAdmin()
-        || (request.auth.uid == uid
-            && !('role' in request.resource.data.diff(resource.data).changedKeys())
-            && !('isActive' in request.resource.data.diff(resource.data).changedKeys()));
+
+      allow update: if superAdmin();
+
+      allow update: if onlyOwner(uid)
+        && active()
+        && cannotChangeRoleOrStatus();
+
       allow delete: if superAdmin();
     }
 
     match /settings/{docId} {
-      allow read: if operation();
-      allow write: if admin();
+      allow read: if operacionGeneral();
+      allow create, update: if admin();
+      allow delete: if superAdmin();
     }
 
     match /rooms/{docId} {
-      allow read: if operation();
-      allow create, update: if admin() || waiter();
+      allow read: if operacionGeneral();
+      allow create, update: if admin() || mesero();
       allow delete: if admin();
     }
 
     match /restaurant_tables/{docId} {
-      allow read: if operation();
-      allow create, update: if admin() || waiter();
+      allow read: if operacionGeneral();
+      allow create, update: if admin() || mesero();
+      allow delete: if admin();
+    }
+
+    match /tables/{docId} {
+      allow read: if operacionGeneral();
+      allow create, update: if admin() || mesero();
       allow delete: if admin();
     }
 
     match /products/{docId} {
-      allow read: if operation();
-      allow write: if admin();
+      allow read: if operacionGeneral();
+      allow create, update, delete: if admin();
     }
 
     match /orders/{docId} {
-      allow read: if operation();
-      allow create: if waiter() || cashier() || admin();
-      allow update: if waiter() || cashier() || kitchen() || admin();
+      allow read: if operacionGeneral();
+      allow create: if meseroOAdmin() || cajaOAdmin();
+      allow update: if meseroOAdmin() || cocinaOAdmin() || cajaOAdmin();
       allow delete: if admin();
     }
 
     match /order_items/{docId} {
-      allow read: if operation();
-      allow create, update: if waiter() || kitchen() || cashier() || admin();
-      allow delete: if admin() || waiter();
+      allow read: if operacionGeneral();
+      allow create: if meseroOAdmin() || cajaOAdmin();
+      allow update: if meseroOAdmin() || cocinaOAdmin() || cajaOAdmin();
+      allow delete: if admin() || mesero();
     }
 
     match /deliveries/{docId} {
-      allow read: if admin() || delivery() || kitchen() || cashier();
-      allow create: if delivery() || cashier() || admin();
-      allow update: if delivery() || kitchen() || cashier() || admin();
+      allow read: if admin() || domicilio() || cocina() || cajero();
+      allow create: if domicilioOAdmin() || cajaOAdmin();
+      allow update: if domicilioOAdmin() || cocinaOAdmin() || cajaOAdmin();
       allow delete: if admin();
     }
 
     match /delivery_items/{docId} {
-      allow read: if admin() || delivery() || kitchen() || cashier();
-      allow create, update: if delivery() || kitchen() || cashier() || admin();
+      allow read: if admin() || domicilio() || cocina() || cajero();
+      allow create: if domicilioOAdmin() || cajaOAdmin();
+      allow update: if domicilioOAdmin() || cocinaOAdmin() || cajaOAdmin();
       allow delete: if admin();
     }
 
     match /customers/{docId} {
-      allow read: if cashier();
-      allow create, update: if cashier();
+      allow read: if cajaOAdmin();
+      allow create, update: if cajaOAdmin();
       allow delete: if admin();
     }
 
     match /credit_movements/{docId} {
-      allow read: if cashier();
-      allow create: if cashier();
+      allow read: if cajaOAdmin();
+      allow create: if cajaOAdmin();
       allow update, delete: if admin();
     }
 
     match /sales/{docId} {
-      allow read: if cashier();
-      allow create: if cashier();
+      allow read: if cajaOAdmin();
+      allow create: if cajaOAdmin();
       allow update, delete: if admin();
     }
 
     match /cash_sessions/{docId} {
-      allow read: if cashier();
-      allow create, update: if cashier();
+      allow read: if cajaOAdmin();
+      allow create, update: if cajaOAdmin();
       allow delete: if admin();
     }
 
@@ -157,10 +208,30 @@ service cloud.firestore {
       allow read, write: if admin();
     }
 
+    match /stock_movements/{docId} {
+      allow read, write: if admin();
+    }
+
     match /app_notifications/{docId} {
-      allow read: if operation();
-      allow create, update: if operation();
+      allow read: if operacionGeneral();
+      allow create, update: if operacionGeneral();
       allow delete: if admin();
+    }
+
+    match /notifications/{docId} {
+      allow read: if operacionGeneral();
+      allow create, update: if operacionGeneral();
+      allow delete: if admin();
+    }
+
+    match /reports/{docId} {
+      allow read, write: if admin();
+    }
+
+    match /audit_logs/{docId} {
+      allow read: if admin();
+      allow create: if operacionGeneral();
+      allow update, delete: if false;
     }
 
     match /{document=**} {

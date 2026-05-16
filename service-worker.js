@@ -1,4 +1,4 @@
-const CACHE = 'luza-pos-github-firebase-v11-fix-carga';
+const CACHE = 'luza-pos-github-firebase-v12-users';
 const ASSETS = [
   './', './index.html', './styles.css', './app.js', './supabase-config.js', './manifest.webmanifest',
   './assets/logo.jpg', './assets/icon-192.png', './assets/icon-512.png', './assets/sounds/urgent.wav', './assets/sounds/ready.wav', './assets/sounds/soft.wav'

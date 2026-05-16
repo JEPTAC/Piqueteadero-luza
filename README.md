@@ -52,7 +52,7 @@ export const FUNCTIONS_REGION = "us-central1";
 
 1. En Firebase Auth crea `admin@luza.local`.
 2. Copia el UID.
-3. En Firestore crea `profiles/UID_DEL_USUARIO`.
+3. En Firestore crea `users/UID_DEL_USUARIO`.
 4. Agrega:
 
 ```json

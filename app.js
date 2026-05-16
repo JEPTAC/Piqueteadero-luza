@@ -35,7 +35,7 @@ const TABLES = {
   rooms:'rooms', tables:'restaurant_tables', products:'products', orders:'orders', orderItems:'order_items',
   deliveries:'deliveries', deliveryItems:'delivery_items', customers:'customers', creditMovements:'credit_movements',
   providers:'providers', expenses:'expenses', employees:'employees', employeePayments:'employee_payments',
-  sales:'sales', cashSessions:'cash_sessions', notifications:'app_notifications', profiles:'profiles'
+  sales:'sales', cashSessions:'cash_sessions', notifications:'app_notifications', users:'users'
 };
 
 let audioUnlocked = false;
@@ -48,7 +48,7 @@ const state = {
   page: 'dashboard', tab: 'products', selectedTable: 'm1', connected: false,
   settings: { brand:'Piqueteadero Luza', logo:'assets/logo.jpg', tax:'Recibo interno POS', receiptNote:'Gracias por su compra' },
   rooms: [], tables: [], products: [], orders: [], deliveries: [], customers: [], creditMovements: [],
-  providers: [], expenses: [], employees: [], employeePayments: [], sales: [], cashSessions: [], notifications: [], profiles: []
+  providers: [], expenses: [], employees: [], employeePayments: [], sales: [], cashSessions: [], notifications: [], users: []
 };
 
 function seed() {
@@ -250,15 +250,15 @@ async function hydrateFirebaseUser(user) {
 
   let snap;
   try {
-    snap = await getDoc(doc(db, 'profiles', user.uid));
+    snap = await getDoc(doc(db, 'users', user.uid));
   } catch (error) {
     showLogin();
-    throw new Error('No se pudo leer profiles/' + user.uid + '. Revisa reglas de Firestore y que la colección se llame profiles. Detalle: ' + error.message);
+    throw new Error('No se pudo leer users/' + user.uid + '. Revisa reglas de Firestore y que la colección se llame users. Detalle: ' + error.message);
   }
 
   if (!snap.exists()) {
     showLogin();
-    notify('El usuario existe en Firebase Auth, pero no tiene perfil/rol en Firestore: profiles/{uid}.', 'urgent');
+    notify('El usuario existe en Firebase Auth, pero no tiene usuario/rol en Firestore: users/{uid}.', 'urgent');
     return;
   }
 
@@ -291,7 +291,7 @@ async function loadFromFirebase() {
   const calls = [
     ['rooms','rooms'], ['tables','restaurant_tables'], ['products','products'], ['orders','orders'], ['orderItems','order_items'],
     ['deliveries','deliveries'], ['deliveryItems','delivery_items'], ['customers','customers'], ['creditMovements','credit_movements'],
-    ['providers','providers'], ['expenses','expenses'], ['employees','employees'], ['employeePayments','employee_payments'], ['sales','sales'], ['cashSessions','cash_sessions'], ['notifications','app_notifications'], ['profiles','profiles']
+    ['providers','providers'], ['expenses','expenses'], ['employees','employees'], ['employeePayments','employee_payments'], ['sales','sales'], ['cashSessions','cash_sessions'], ['notifications','app_notifications'], ['users','users']
   ];
   const errors = [];
   for (const [key, colName] of calls) {
@@ -318,7 +318,7 @@ function setupRealtime() {
   if (!configured || realtimeReady) return;
   realtimeReady = true;
 
-  ['orders','order_items','deliveries','delivery_items','restaurant_tables','products','sales','expenses','employee_payments','cash_sessions','profiles'].forEach(colName => {
+  ['orders','order_items','deliveries','delivery_items','restaurant_tables','products','sales','expenses','employee_payments','cash_sessions','users'].forEach(colName => {
     onSnapshot(collection(db, colName), scheduleReload, (error) => {
       console.warn('Realtime sin permiso o no disponible en', colName, error);
     });
@@ -584,7 +584,7 @@ function users() {
   if (state.user.role !== 'super_admin') {
     return `<div class="empty">Solo el super admin puede crear usuarios internos.</div>`;
   }
-  const profileRows = (state.profiles || []).filter(p => p.role);
+  const userRows = (state.users || []).filter(p => p.role);
   return `<div class="grid two">
     <div class="card">
       <div class="title"><div><h2>Crear usuario interno</h2><p>El empleado entra con usuario y contraseña. No necesita correo.</p></div></div>
@@ -606,7 +606,7 @@ function users() {
     </div>
     <div class="card">
       <div class="title"><div><h2>Usuarios registrados</h2><p>Perfiles activos en Firestore.</p></div></div>
-      <div class="list">${profileRows.map(u => `<div class="line"><div><strong>${esc(u.name || u.username || 'Usuario')}</strong><span class="small">${esc(u.username || '')} · ${esc(u.email || '')} · ${esc(ROLES[u.role] || u.role)}</span></div><span class="status ${u.isActive === false ? 's-bad':'s-ok'}">${u.isActive === false ? 'Inactivo':'Activo'}</span></div>`).join('') || '<div class="empty">Aquí aparecerán los usuarios creados en Firebase.</div>'}</div>
+      <div class="list">${userRows.map(u => `<div class="line"><div><strong>${esc(u.name || u.username || 'Usuario')}</strong><span class="small">${esc(u.username || '')} · ${esc(u.email || '')} · ${esc(ROLES[u.role] || u.role)}</span></div><span class="status ${u.isActive === false ? 's-bad':'s-ok'}">${u.isActive === false ? 'Inactivo':'Activo'}</span></div>`).join('') || '<div class="empty">Aquí aparecerán los usuarios creados en Firebase.</div>'}</div>
     </div>
   </div>`;
 }
