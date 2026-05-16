@@ -1,15 +1,22 @@
 {
   "name": "Piqueteadero Luza POS",
   "short_name": "Luza POS",
-  "description": "POS instalable para restaurante con Firebase, roles, mesas, cocina, caja, domicilios y analítica.",
+  "description": "Super app POS para restaurante con Firebase Auth y Firestore.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "orientation": "any",
   "background_color": "#080808",
-  "theme_color": "#f7c531",
+  "theme_color": "#080808",
   "icons": [
-    {"src":"assets/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any maskable"},
-    {"src":"assets/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
+    {
+      "src": "luza-logo.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg"
+    },
+    {
+      "src": "assets/luza-logo.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg"
+    }
   ]
 }

@@ -1,0 +1,16 @@
+LUZA POS V19 - Paquete completo
+
+Este ZIP no está vacío. La app principal está concentrada en index.html, que contiene HTML + CSS + JavaScript de la super app.
+
+Archivos incluidos:
+- index.html: aplicación completa.
+- luza-logo.jpg: logo en raíz, usado por la app.
+- assets/: logo y sonidos.
+- manifest.webmanifest: instalación PWA.
+- service-worker.js: caché básico para instalación.
+- database/firestore.rules: reglas para pegar en Firestore.
+- firestore-rules-v18.rules: copia rápida de reglas.
+- README_V18_LOGIN_BOTONES.md: instrucciones de login por botones.
+- .nojekyll: evita problemas de GitHub Pages.
+
+No se recortaron módulos: mesero, caja, cocina, bar, domicilios, créditos, gerencia, productos, pagos y usuarios siguen en index.html.
