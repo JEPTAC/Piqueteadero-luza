@@ -103,3 +103,15 @@ git push -u origin main
 ```
 
 Luego activa GitHub Pages en Settings > Pages.
+
+
+## Regla importante V14
+
+La colección oficial de usuarios es `users`, no `profiles`.
+
+Si el login muestra un UID, crea el documento con ese UID exacto:
+
+```txt
+users/UID_QUE_MUESTRA_EL_ERROR
+```
+

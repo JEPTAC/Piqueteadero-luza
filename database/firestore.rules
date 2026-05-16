@@ -31,26 +31,6 @@ service cloud.firestore {
       return active() && role() == 'super_admin';
     }
 
-    function gerente() {
-      return active() && role() == 'gerente';
-    }
-
-    function mesero() {
-      return active() && role() == 'mesero';
-    }
-
-    function cajero() {
-      return active() && role() == 'cajero';
-    }
-
-    function cocina() {
-      return active() && role() == 'cocina';
-    }
-
-    function domicilio() {
-      return active() && role() == 'domicilio';
-    }
-
     function admin() {
       return active() && role() in ['super_admin', 'gerente'];
     }
@@ -93,17 +73,22 @@ service cloud.firestore {
 
     // =========================================================
     // USUARIOS INTERNOS
-    // users/UID_DEL_USUARIO
+    // Colección oficial: users
+    // Documento: users/UID_DE_FIREBASE_AUTH
     // =========================================================
     match /users/{uid} {
-      allow read: if active() && (onlyOwner(uid) || admin());
+      // El usuario autenticado puede leer su propio documento aunque todavía
+      // falte o esté mal configurado; así la app puede mostrar el error real.
+      allow read: if onlyOwner(uid) || admin();
 
-      // El primer usuario lo puedes crear manualmente desde consola.
-      // Luego, la Cloud Function createInternalUser crea los demás.
+      // Los usuarios los crea el super_admin desde la app mediante Cloud Functions.
+      // El primer super_admin se crea manualmente desde Firebase Console.
       allow create: if superAdmin();
 
+      // Super admin administra roles y estados.
       allow update: if superAdmin();
 
+      // El usuario puede editar datos básicos, pero no rol ni estado.
       allow update: if onlyOwner(uid)
         && active()
         && cannotChangeRoleOrStatus();
@@ -119,19 +104,19 @@ service cloud.firestore {
 
     match /rooms/{docId} {
       allow read: if operacionGeneral();
-      allow create, update: if admin() || mesero();
+      allow create, update: if admin() || meseroOAdmin();
       allow delete: if admin();
     }
 
     match /restaurant_tables/{docId} {
       allow read: if operacionGeneral();
-      allow create, update: if admin() || mesero();
+      allow create, update: if admin() || meseroOAdmin();
       allow delete: if admin();
     }
 
     match /tables/{docId} {
       allow read: if operacionGeneral();
-      allow create, update: if admin() || mesero();
+      allow create, update: if admin() || meseroOAdmin();
       allow delete: if admin();
     }
 
@@ -151,18 +136,18 @@ service cloud.firestore {
       allow read: if operacionGeneral();
       allow create: if meseroOAdmin() || cajaOAdmin();
       allow update: if meseroOAdmin() || cocinaOAdmin() || cajaOAdmin();
-      allow delete: if admin() || mesero();
+      allow delete: if admin() || meseroOAdmin();
     }
 
     match /deliveries/{docId} {
-      allow read: if admin() || domicilio() || cocina() || cajero();
+      allow read: if domicilioOAdmin() || cocinaOAdmin() || cajaOAdmin();
       allow create: if domicilioOAdmin() || cajaOAdmin();
       allow update: if domicilioOAdmin() || cocinaOAdmin() || cajaOAdmin();
       allow delete: if admin();
     }
 
     match /delivery_items/{docId} {
-      allow read: if admin() || domicilio() || cocina() || cajero();
+      allow read: if domicilioOAdmin() || cocinaOAdmin() || cajaOAdmin();
       allow create: if domicilioOAdmin() || cajaOAdmin();
       allow update: if domicilioOAdmin() || cocinaOAdmin() || cajaOAdmin();
       allow delete: if admin();

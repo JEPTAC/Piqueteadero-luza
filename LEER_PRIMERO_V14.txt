@@ -1,0 +1,28 @@
+V14 - Corrección definitiva para colección users
+
+Error que corrige:
+- Missing or insufficient permissions leyendo users/UID.
+- Confusión entre profiles y users.
+- Regla circular que impedía leer el propio users/UID cuando algo estaba mal.
+
+Estructura oficial:
+Authentication:
+  admin@luza.local
+
+Firestore:
+  users/UID_DE_admin@luza.local
+
+Campos:
+  name: Super Administrador           string
+  username: admin                     string
+  email: admin@luza.local             string
+  role: super_admin                   string
+  isActive: true                      boolean
+
+IMPORTANTE:
+1. Pega las reglas de database/firestore.rules en Firebase Console > Firestore > Rules.
+2. Publica las reglas.
+3. Revisa que el UID del error sea el mismo ID del documento en users.
+4. Si vuelves a crear admin@luza.local, el UID cambia. Debes crear users/NUEVO_UID.
+5. Si dice "Firebase Auth rechazó el ingreso", el problema es email/PIN.
+6. Si dice "Falta crear users/UID", Auth ya funcionó y falta Firestore.
