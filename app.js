@@ -6,7 +6,12 @@ import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/
 
 const $ = (id) => document.getElementById(id);
 const money = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
-const configured = Boolean(FIREBASE_CONFIG?.apiKey && FIREBASE_CONFIG?.projectId && !DEMO_MODE);
+const configured = Boolean(
+  FIREBASE_CONFIG?.apiKey &&
+  FIREBASE_CONFIG?.projectId &&
+  !String(FIREBASE_CONFIG.apiKey).includes('PEGA_AQUI') &&
+  !String(FIREBASE_CONFIG.projectId).includes('TU_PROYECTO')
+);
 const firebaseApp = configured ? initializeApp(FIREBASE_CONFIG) : null;
 const auth = configured ? getAuth(firebaseApp) : null;
 const db = configured ? getFirestore(firebaseApp) : null;
@@ -39,7 +44,7 @@ let reloadTimer = null;
 
 const state = {
   session: null,
-  user: { id:'demo-gerente', name:'Gerente demo', role:'gerente', email:'demo@luza.local' },
+  user: { id:null, name:'Usuario', role:'', email:'' },
   page: 'dashboard', tab: 'products', selectedTable: 'm1', connected: false,
   settings: { brand:'Piqueteadero Luza', logo:'assets/logo.jpg', tax:'Recibo interno POS', receiptNote:'Gracias por su compra' },
   rooms: [], tables: [], products: [], orders: [], deliveries: [], customers: [], creditMovements: [],
@@ -146,31 +151,39 @@ function usernameToEmail(username) {
 }
 
 function showLogin() {
-  $('login').classList.remove('hidden'); $('app').classList.add('hidden');
+  $('login').classList.remove('hidden');
+  $('app').classList.add('hidden');
+
+  const configWarning = configured ? '' : `
+    <div class="danger" style="margin-top:14px;text-align:left">
+      <strong>Firebase todavía no está configurado.</strong>
+      <p class="small">Edita <b>firebase-config.js</b>, pega la configuración real del proyecto y verifica que <b>DEMO_MODE = false</b>.</p>
+    </div>`;
+
   $('login').innerHTML = `
     <div class="login-card">
       <img src="assets/logo.jpg" alt="Logo">
       <h1>Piqueteadero Luza POS</h1>
-      <p>${configured ? 'Ingresa con usuario y contraseña.' : 'Modo demo local. Configura Firebase para operación real.'}</p>
-      ${configured ? `
-        <form id="loginForm" class="form">
-          <div class="full"><label>Usuario</label><input class="input" id="username" type="text" autocomplete="username" placeholder="Ej: cajero1" required></div>
-          <div class="full"><label>Contraseña</label><input class="input" id="password" type="password" autocomplete="current-password" required></div>
-          <div class="full"><button class="btn yellow block">Ingresar</button></div>
-        </form>
-        <p class="small">La app convierte internamente el usuario a usuario@luza.local para Firebase Auth.</p>` : `
-        <div class="demo-grid">
-          ${Object.entries(ROLES).map(([r,l]) => `<button class="btn ${SUPER_ROLES.includes(r)?'yellow':'white'}" onclick="window.__demoLogin('${r}')">${l}</button>`).join('')}
-        </div>`}
+      <p>Ingreso seguro con código de usuario y PIN.</p>
+      <form id="loginForm" class="form">
+        <div class="full">
+          <label>Código de usuario</label>
+          <input class="input" id="username" type="text" autocomplete="username" placeholder="Ej: admin, cajero1, mesero1" required ${configured ? '' : 'disabled'}>
+        </div>
+        <div class="full">
+          <label>PIN / contraseña</label>
+          <input class="input" id="password" type="password" autocomplete="current-password" inputmode="numeric" required ${configured ? '' : 'disabled'}>
+        </div>
+        <div class="full">
+          <button class="btn yellow block" ${configured ? '' : 'disabled'}>Ingresar</button>
+        </div>
+      </form>
+      <p class="small">La app convierte internamente el código a usuario@luza.local para Firebase Auth.</p>
+      ${configWarning}
     </div>`;
+
   if (configured) $('loginForm').onsubmit = loginFirebase;
 }
-
-window.__demoLogin = (role) => {
-  state.user = { id:`demo-${role}`, name: ROLES[role], role, email:`${role}@luza.local` };
-  state.page = (ACCESS[role] || ['dashboard'])[0];
-  $('login').classList.add('hidden'); $('app').classList.remove('hidden'); render();
-};
 
 async function loginFirebase(e) {
   e.preventDefault();
@@ -179,7 +192,7 @@ async function loginFirebase(e) {
     const cred = await signInWithEmailAndPassword(auth, email, password);
     await hydrateFirebaseUser(cred.user);
   } catch (error) {
-    notify('No se pudo ingresar. Revisa usuario o contraseña.', 'urgent');
+    notify('No se pudo ingresar. Revisa código de usuario o PIN.', 'urgent');
   }
 }
 async function hydrateFirebaseUser(user) {
@@ -311,7 +324,7 @@ function render() {
   $('pageTitle').textContent = title; $('pageSub').textContent = sub;
   $('userName').textContent = state.user.name; $('userRole').textContent = ROLES[state.user.role] || state.user.role;
   $('mobileRole').textContent = ROLES[state.user.role] || state.user.role;
-  $('connectionPill').innerHTML = `<span class="dot ${configured && state.connected ? 'online' : ''}"></span>${configured ? 'Firebase activo' : 'Demo local'}`;
+  $('connectionPill').innerHTML = `<span class="dot ${configured && state.connected ? 'online' : ''}"></span>${configured ? 'Firebase activo' : 'Firebase sin configurar'}`;
   const pageRender = {dashboard, waiter, cashier, production, delivery, credit, manager, settings, users}[state.page] || dashboard;
   $('view').innerHTML = pageRender();
 }
@@ -494,7 +507,7 @@ function users() {
     </div>
     <div class="card">
       <div class="title"><div><h2>Usuarios registrados</h2><p>Perfiles activos en Firestore.</p></div></div>
-      <div class="list">${profileRows.map(u => `<div class="line"><div><strong>${esc(u.name || u.username || 'Usuario')}</strong><span class="small">${esc(u.username || '')} · ${esc(u.email || '')} · ${esc(ROLES[u.role] || u.role)}</span></div><span class="status ${u.isActive === false ? 's-bad':'s-ok'}">${u.isActive === false ? 'Inactivo':'Activo'}</span></div>`).join('') || '<div class="empty">Cuando conectes Firebase aparecerán los usuarios creados.</div>'}</div>
+      <div class="list">${profileRows.map(u => `<div class="line"><div><strong>${esc(u.name || u.username || 'Usuario')}</strong><span class="small">${esc(u.username || '')} · ${esc(u.email || '')} · ${esc(ROLES[u.role] || u.role)}</span></div><span class="status ${u.isActive === false ? 's-bad':'s-ok'}">${u.isActive === false ? 'Inactivo':'Activo'}</span></div>`).join('') || '<div class="empty">Aquí aparecerán los usuarios creados en Firebase.</div>'}</div>
     </div>
   </div>`;
 }
@@ -525,4 +538,24 @@ window.__toggleEmployee = async (id) => { const e=employee(id); e.active=!e.acti
 window.__updCustomer = async (id,field,value) => { const c=customer(id); c[field]=value; await dbUpsert(TABLES.customers,c); render(); };
 window.__exportExcel = () => { const html=`<html><head><meta charset="utf-8"></head><body><h1>Reporte gerencial Piqueteadero Luza</h1><h2>Resumen</h2><table border="1"><tr><th>Ventas</th><th>Costo producto</th><th>Gastos</th><th>Empleados</th><th>Utilidad neta</th></tr><tr><td>${state.sales.reduce((a,s)=>a+s.total,0)}</td><td>${state.sales.reduce((a,s)=>a+s.cost,0)}</td><td>${state.expenses.reduce((a,e)=>a+e.amount,0)}</td><td>${state.employeePayments.reduce((a,e)=>a+e.amount,0)}</td><td>${state.sales.reduce((a,s)=>a+s.total-s.cost,0)-state.expenses.reduce((a,e)=>a+e.amount,0)-state.employeePayments.reduce((a,e)=>a+e.amount,0)}</td></tr></table><h2>Ventas</h2><table border="1"><tr><th>Fecha</th><th>Tipo</th><th>Método</th><th>Total</th><th>Costo</th></tr>${state.sales.map(s=>`<tr><td>${new Date(s.created_at).toLocaleString('es-CO')}</td><td>${s.type}</td><td>${s.method}</td><td>${s.total}</td><td>${s.cost}</td></tr>`).join('')}</table><h2>Pagos empleados</h2><table border="1"><tr><th>Fecha</th><th>Empleado</th><th>Concepto</th><th>Valor</th><th>Método</th></tr>${state.employeePayments.map(p=>`<tr><td>${new Date(p.created_at).toLocaleString('es-CO')}</td><td>${employee(p.employee_id)?.name||''}</td><td>${p.concept}</td><td>${p.amount}</td><td>${p.method}</td></tr>`).join('')}</table><h2>Productos</h2><table border="1"><tr><th>Producto</th><th>Categoría</th><th>Precio</th><th>Costo</th><th>Stock</th></tr>${state.products.map(p=>`<tr><td>${p.name}</td><td>${p.category}</td><td>${p.price}</td><td>${p.cost}</td><td>${p.stock}</td></tr>`).join('')}</table></body></html>`; const blob=new Blob([html],{type:'application/vnd.ms-excel'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='reporte-gerencial-luza.xls'; a.click(); URL.revokeObjectURL(a.href); };
 
+window.__createInternalUser = async () => {
+  const name = $('newUserName')?.value?.trim();
+  const username = $('newUsername')?.value?.trim().toLowerCase().replace(/\s+/g,'');
+  const password = $('newPassword')?.value;
+  const role = $('newRole')?.value;
+
+  if (!configured) return notify('Firebase no está configurado. No se pueden crear usuarios reales.', 'urgent');
+  if (state.user.role !== 'super_admin') return notify('Solo el super admin puede crear usuarios.', 'urgent');
+  if (!name || !username || !password || !role) return notify('Completa nombre, usuario, PIN y rol.', 'urgent');
+  if (password.length < 6) return notify('El PIN/contraseña debe tener mínimo 6 caracteres.', 'urgent');
+
+  try {
+    const result = await createInternalUserFn({ name, username, password, role });
+    notify(`Usuario creado: ${result.data.username}`, 'soft');
+    await loadFromFirebase();
+    render();
+  } catch (error) {
+    notify(`No se pudo crear el usuario: ${error.message}`, 'urgent');
+  }
+};
 boot();

@@ -1,0 +1,5 @@
+Firebase configurado para el proyecto piqueteadero-luza.
+DEMO_MODE = false.
+Login esperado: código de usuario + PIN.
+Primer usuario esperado en Auth: admin@luza.local.
+Perfil esperado en Firestore: profiles/UID_DEL_USUARIO con role super_admin.

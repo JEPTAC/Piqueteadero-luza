@@ -1,0 +1,22 @@
+LUZA POS V10 - PRODUCCIÓN FIREBASE
+
+Esta versión ya no tiene botones de demo por rol.
+
+Login visible:
+- Código de usuario
+- PIN / contraseña
+
+Conversión interna:
+admin -> admin@luza.local
+cajero1 -> cajero1@luza.local
+mesero1 -> mesero1@luza.local
+
+Antes de usar:
+1. Edita firebase-config.js con la configuración real.
+2. Deja export const DEMO_MODE = false;
+3. Crea el primer super_admin manualmente.
+4. Publica reglas Firestore.
+5. Despliega Cloud Functions para que el super_admin cree usuarios desde la app.
+6. Publica la app en GitHub Pages.
+
+No usa Firebase Hosting.

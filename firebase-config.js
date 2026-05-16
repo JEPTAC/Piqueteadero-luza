@@ -1,18 +1,13 @@
-// Reemplaza estos datos con la configuración de tu proyecto Firebase.
-// Firebase Console > Project settings > General > Your apps > SDK setup and configuration
 export const FIREBASE_CONFIG = {
-  apiKey: "",
-  authDomain: "",
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: ""
+  apiKey: "AIzaSyAWMufoSxIGWIKEVMTfc9zossdk6h2sEy0",
+  authDomain: "piqueteadero-luza.firebaseapp.com",
+  projectId: "piqueteadero-luza",
+  storageBucket: "piqueteadero-luza.firebasestorage.app",
+  messagingSenderId: "1025148247786",
+  appId: "1:1025148247786:web:73341324368cf7adc58193",
+  measurementId: "G-7KRM2YVJPE"
 };
 
-// En true funciona como demo local sin Firebase.
-// Cuando pegues la configuración real, cambia a false.
-export const DEMO_MODE = true;
+export const DEMO_MODE = false;
 
-
-// Región de Cloud Functions para crear usuarios internos desde el panel de super admin.
 export const FUNCTIONS_REGION = "us-central1";
